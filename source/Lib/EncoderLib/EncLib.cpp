@@ -273,7 +273,9 @@ void EncLib::initPass( int pass, const char* statsFName )
 
   // gop encoder
   m_gopEncoder = new EncGOP( msg );
-  const int minQueueSize = m_encCfg.m_GOPSize + 1;
+  // For low-latency real-time encoding, use minQueueSize=1 to process frames immediately
+  // instead of waiting for GOP size + 1 frames
+  const int minQueueSize = (m_encCfg.m_maxParallelFrames == 0 && m_encCfg.m_leadFrames == 0) ? 1 : (m_encCfg.m_GOPSize + 1);
   m_gopEncoder->initStage( m_encCfg, minQueueSize, 0, false, false, m_encCfg.m_stageParallelProc );
   m_gopEncoder->init( m_encCfg, m_preProcess->getGOPCfg(), *m_rateCtrl, m_threadPool, false );
   m_encStages.push_back( m_gopEncoder );
