@@ -351,7 +351,10 @@ int EncApp::encode()
         inputPacket = &yuvInBuf;
       }
 
+      static int64_t iSeqNumber = 0;
+      printf("mhhh Encoding frame %lld!!!!!!\n", iSeqNumber);
       iRet = vvenc_encode( m_encCtx, inputPacket, &au, &encDone );
+      iSeqNumber++;
       if( 0 != iRet )
       {
         msgApp( VVENC_ERROR, "\nencoding failed: err code %d: %s\n", iRet, vvenc_get_last_error(m_encCtx) );
@@ -362,6 +365,9 @@ int EncApp::encode()
       // write out encoded access units
       if( au.payloadUsedSize )
       {
+        static int64_t iWriteSequenceNumber = 0;
+        printf("mhhh Writing encoded frame %lld!!!!!!\n", iWriteSequenceNumber);
+        iWriteSequenceNumber++;
         if ( 0 != outputAU( au ) )
         {
           msgApp( VVENC_ERROR, "\nwrite bitstream file failed (disk full?)\n");

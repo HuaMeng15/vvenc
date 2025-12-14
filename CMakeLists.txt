@@ -48,7 +48,7 @@ endif()
 # We enable x86 intrinsics for all target architectures, because they are implemented through SIMD-everywhere on non-x86.
 set( VVENC_ENABLE_X86_SIMD TRUE                      CACHE BOOL "Enable x86 intrinsics" )
 set( VVENC_ENABLE_ARM_SIMD ${VVENC_ARM_SIMD_DEFAULT} CACHE BOOL "Enable Arm Neon intrinsics" )
-set( VVENC_ENABLE_ARM_SIMD_SVE ${FLAG_sve}           CACHE BOOL "Enable Arm SVE intrinsics" )
+set( VVENC_ENABLE_ARM_SIMD_SVE FALSE                 CACHE BOOL "Enable Arm SVE intrinsics" )
 set( VVENC_ENABLE_ARM_SIMD_SVE2 FALSE                CACHE BOOL "Enable Arm SVE2 intrinsics" )
 set( VVENC_ENABLE_LOONGARCH64_SIMD_LSX ${VVENC_LOONGARCH64_SIMD_DEFAULT} CACHE BOOL "Enable LoongArch64 LSX intrinsics" )
 set( VVENC_FFP_CONTRACT_OFF OFF                      CACHE BOOL "Disable floating point expression contraction fFr exact math" )
@@ -265,7 +265,7 @@ endif()
 
 # set default CMAKE_BUILD_TYPE to Release if not set
 if( NOT CMAKE_BUILD_TYPE )
-  set( CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE )
+  set( CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE )
 endif()
 
 # set c++14

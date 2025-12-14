@@ -36,7 +36,7 @@ target_compile_options( ${EXE_NAME} PRIVATE $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CX
                                             $<$<CXX_COMPILER_ID:GNU>:-Wall -fdiagnostics-show-option>
                                             $<$<CXX_COMPILER_ID:MSVC>:/W4 /wd4100 /wd4244 /wd4251 /wd4459 /wd4996>)
 
-target_include_directories( ${EXE_NAME} PRIVATE ../../Lib )
+target_include_directories( ${EXE_NAME} PRIVATE ../../Lib ${CMAKE_BINARY_DIR} )
 target_link_libraries( ${EXE_NAME} Threads::Threads vvenc )
 target_include_directories( ${EXE_NAME} PRIVATE $<$<TARGET_EXISTS:nlohmann_json::nlohmann_json>:$<TARGET_PROPERTY:nlohmann_json::nlohmann_json,INTERFACE_INCLUDE_DIRECTORIES>> )
 target_compile_options( ${EXE_NAME} PRIVATE $<$<TARGET_EXISTS:nlohmann_json::nlohmann_json>:$<TARGET_PROPERTY:nlohmann_json::nlohmann_json,INTERFACE_COMPILE_OPTIONS>> )

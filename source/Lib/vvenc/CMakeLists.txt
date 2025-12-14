@@ -190,6 +190,19 @@ add_library( ${LIB_NAME} ${SRC_FILES} $<$<TARGET_EXISTS:${LIB_NAME}_x86_simd>:$<
 target_compile_definitions( ${LIB_NAME} PUBLIC $<$<STREQUAL:$<TARGET_PROPERTY:${LIB_NAME},TYPE>,SHARED_LIBRARY>:${LIB_NAME_UC}_DYN_LINK> )
 
 target_include_directories( ${LIB_NAME} SYSTEM INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../../include> $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}> )
+target_include_directories( ${LIB_NAME} PRIVATE 
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/..
+  ${CMAKE_CURRENT_SOURCE_DIR}/../DecoderLib
+  ${CMAKE_CURRENT_SOURCE_DIR}/../EncoderLib
+  ${CMAKE_CURRENT_SOURCE_DIR}/../CommonLib
+  ${CMAKE_CURRENT_SOURCE_DIR}/../CommonLib/x86
+  ${CMAKE_CURRENT_SOURCE_DIR}/../CommonLib/arm
+  ${CMAKE_CURRENT_SOURCE_DIR}/../apputils
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../include
+  ${CMAKE_BINARY_DIR}
+)
+target_include_directories( ${LIB_NAME} SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../../thirdparty )
 
 if( CMAKE_COMPILER_IS_GNUCC AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 7.0 )
   target_compile_options( ${LIB_NAME} PRIVATE $<$<CXX_COMPILER_ID:GNU>: -Wno-array-bounds> )

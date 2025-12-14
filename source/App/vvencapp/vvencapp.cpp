@@ -64,7 +64,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "apputils/VVEncAppCfg.h"
 #include "apputils/Stats.h"
 
-vvencMsgLevel g_verbosity = VVENC_VERBOSE;
+vvencMsgLevel g_verbosity = VVENC_DETAILS;
 
 void msgFnc( void*, int level, const char* fmt, va_list args )
 {
@@ -80,6 +80,73 @@ void msgApp( void* ctx, int level, const char* fmt, ... )
   va_start( args, fmt );
   msgFnc( ctx, level, fmt, args );
   va_end( args );
+}
+
+// small helper to view NAL units inside an Annex-B access unit
+struct NalView
+{
+  const uint8_t* ptr;
+  int            size;
+};
+
+// split one Annex-B access unit buffer into individual NAL units
+// each NalView includes its start code (00 00 01 or 00 00 00 01)
+static std::vector<NalView> splitAnnexBToNals( const uint8_t* data, int size )
+{
+  std::vector<NalView> nals;
+  if( !data || size <= 0 ) return nals;
+
+  auto isStartCode = [&]( int pos, int& scLen ) -> bool
+  {
+    if( pos + 3 > size ) return false;
+    // 00 00 01
+    if( data[pos] == 0x00 && data[pos + 1] == 0x00 && data[pos + 2] == 0x01 )
+    {
+      scLen = 3;
+      return true;
+    }
+    // 00 00 00 01
+    if( pos + 4 <= size &&
+        data[pos]     == 0x00 &&
+        data[pos + 1] == 0x00 &&
+        data[pos + 2] == 0x00 &&
+        data[pos + 3] == 0x01 )
+    {
+      scLen = 4;
+      return true;
+    }
+    return false;
+  };
+
+  int i        = 0;
+  int nalStart = -1;
+
+  while( i < size )
+  {
+    int scLen = 0;
+    if( isStartCode( i, scLen ) )
+    {
+      // close previous NAL
+      if( nalStart >= 0 )
+      {
+        nals.push_back( NalView{ data + nalStart, i - nalStart } );
+      }
+      nalStart = i;
+      i       += scLen;
+    }
+    else
+    {
+      ++i;
+    }
+  }
+
+  // last NAL
+  if( nalStart >= 0 && nalStart < size )
+  {
+    nals.push_back( NalView{ data + nalStart, size - nalStart } );
+  }
+
+  return nals;
 }
 
 void changePreset( vvenc_config* c, vvencPresetMode preset )
@@ -108,97 +175,200 @@ void printVVEncErrorMsg( const std::string cMessage, int code, const std::string
 
 bool parseCfg( int argc, char* argv[], apputils::VVEncAppCfg& rcVVEncAppCfg, vvenc_config &vvenccfg )
 {
-  std::stringstream cParserStr;
+  // std::stringstream cParserStr;
   bool ret = true;
 
-  if( argc )
-  {
-    // remove application name
-    argc--;
-    argv++;
-  }
+  // if( argc )
+  // {
+  //   // remove application name
+  //   argc--;
+  //   argv++;
+  // }
   
-  int parserRes =  rcVVEncAppCfg.parse( argc, argv, &vvenccfg, cParserStr );
-  if( parserRes != 0 )
-  {
-    if( rcVVEncAppCfg.m_showHelp )
-    {
-      msgApp( nullptr, VVENC_INFO, "vvencapp: %s\n", vvenc_get_enc_information( nullptr ));
-      if( !cParserStr.str().empty() )
-        msgApp( nullptr, VVENC_INFO, "%s", cParserStr.str().c_str() );
-      return true;
-    }
-    else if( rcVVEncAppCfg.m_showVersion)
-    {
-      msgApp( nullptr, VVENC_INFO,"vvencapp version %s\n", vvenc_get_version());
-      if( !cParserStr.str().empty() )
-        msgApp( nullptr, VVENC_INFO, "%s", cParserStr.str().c_str() );
-      return true;
-    }
-  };
+  // int parserRes =  rcVVEncAppCfg.parse( argc, argv, &vvenccfg, cParserStr );
+  // if( parserRes != 0 )
+  // {
+  //   if( rcVVEncAppCfg.m_showHelp )
+  //   {
+  //     msgApp( nullptr, VVENC_INFO, "vvencapp: %s\n", vvenc_get_enc_information( nullptr ));
+  //     if( !cParserStr.str().empty() )
+  //       msgApp( nullptr, VVENC_INFO, "%s", cParserStr.str().c_str() );
+  //     return true;
+  //   }
+  //   else if( rcVVEncAppCfg.m_showVersion)
+  //   {
+  //     msgApp( nullptr, VVENC_INFO,"vvencapp version %s\n", vvenc_get_version());
+  //     if( !cParserStr.str().empty() )
+  //       msgApp( nullptr, VVENC_INFO, "%s", cParserStr.str().c_str() );
+  //     return true;
+  //   }
+  // };
 
-  if(  parserRes >= 0 )  g_verbosity = vvenccfg.m_verbosity;
-  else ret = false;
+  // if(  parserRes >= 0 )  g_verbosity = vvenccfg.m_verbosity;
+  // else ret = false;
 
-  msgApp( nullptr, VVENC_INFO, "vvencapp: %s\n", vvenc_get_enc_information( nullptr ));
+  // msgApp( nullptr, VVENC_INFO, "vvencapp: %s\n", vvenc_get_enc_information( nullptr ));
 
-  if( !cParserStr.str().empty() )
-    msgApp( nullptr, (parserRes < 0 ) ? VVENC_ERROR : ((parserRes > 0) ? VVENC_WARNING : VVENC_INFO), "%s", cParserStr.str().c_str() );
+  // if( !cParserStr.str().empty() )
+  //   msgApp( nullptr, (parserRes < 0 ) ? VVENC_ERROR : ((parserRes > 0) ? VVENC_WARNING : VVENC_INFO), "%s", cParserStr.str().c_str() );
 
 
-  if( !rcVVEncAppCfg.m_additionalSettings.empty() )
-  {
-    std::vector <std::tuple<std::string, std::string>> dict = rcVVEncAppCfg.getAdditionalSettingList();
+  // if( !rcVVEncAppCfg.m_additionalSettings.empty() )
+  // {
+  //   std::vector <std::tuple<std::string, std::string>> dict = rcVVEncAppCfg.getAdditionalSettingList();
 
-    if( dict.empty() )
-    {
-      msgApp( nullptr, VVENC_ERROR, "Error parsing additional option string \"%s\"\n",rcVVEncAppCfg.m_additionalSettings.c_str() );
-      return false;
-    }
+  //   if( dict.empty() )
+  //   {
+  //     msgApp( nullptr, VVENC_ERROR, "Error parsing additional option string \"%s\"\n",rcVVEncAppCfg.m_additionalSettings.c_str() );
+  //     return false;
+  //   }
 
-    for( auto & d : dict )
-    {
-      std::string key = std::get<0>(d);
-      std::string value = std::get<1>(d);
-      msgApp( nullptr, VVENC_DETAILS, "additional params: set option key:'%s' value:'%s'\n", key.c_str(), value.c_str() );
-      int parse_ret = vvenc_set_param( &vvenccfg, key.c_str(), value.c_str() );
-      switch (parse_ret)
-      {
-        case VVENC_PARAM_BAD_NAME:
-            msgApp( nullptr, VVENC_ERROR, "additional params: unknown option \"%s\" \n", key.c_str() );
-            ret = false;
-            break;
-        case VVENC_PARAM_BAD_VALUE:
-          msgApp( nullptr, VVENC_ERROR, "additional params: invalid value for key \"%s\": \"%s\" \n", key.c_str(), value.c_str() );
-            ret = false;
-            break;
-        default:
-            break;
-      }
-    }
-  }
+  //   for( auto & d : dict )
+  //   {
+  //     std::string key = std::get<0>(d);
+  //     std::string value = std::get<1>(d);
+  //     msgApp( nullptr, VVENC_DETAILS, "additional params: set option key:'%s' value:'%s'\n", key.c_str(), value.c_str() );
+  //     int parse_ret = vvenc_set_param( &vvenccfg, key.c_str(), value.c_str() );
+  //     switch (parse_ret)
+  //     {
+  //       case VVENC_PARAM_BAD_NAME:
+  //           msgApp( nullptr, VVENC_ERROR, "additional params: unknown option \"%s\" \n", key.c_str() );
+  //           ret = false;
+  //           break;
+  //       case VVENC_PARAM_BAD_VALUE:
+  //         msgApp( nullptr, VVENC_ERROR, "additional params: invalid value for key \"%s\": \"%s\" \n", key.c_str(), value.c_str() );
+  //           ret = false;
+  //           break;
+  //       default:
+  //           break;
+  //     }
+  //   }
+  // }
 
   if ( vvenccfg.m_internChromaFormat < 0 || vvenccfg.m_internChromaFormat >= VVENC_NUM_CHROMA_FORMAT )
   {
     vvenccfg.m_internChromaFormat = rcVVEncAppCfg.m_inputFileChromaFormat;
   }
+  printf("\n\nm_internChromaFormat=%d\n\n", vvenccfg.m_internChromaFormat);
 
+  // Disable LookAhead for real-time encoding (it causes frame buffering)
+  vvenccfg.m_LookAhead = 0;
+  // Force single-pass encoding for real-time low-latency encoding
+  // Two-pass encoding buffers all frames, which is not suitable for real-time
   if( vvenccfg.m_RCNumPasses < 0 && ( vvenccfg.m_RCPass > 0 || vvenccfg.m_RCTargetBitrate > 0 ) )
   {
-    vvenccfg.m_RCNumPasses = 2;
+    vvenccfg.m_RCNumPasses = 1;  // Use single-pass instead of 2-pass for real-time encoding
   }
+
+  vvenccfg.m_internChromaFormat = VVENC_CHROMA_420;
+
+  vvenccfg.m_IntraPeriod = -1;
+  vvenccfg.m_DecodingRefreshType = VVENC_DRT_NONE;
+  vvenccfg.m_GOPSize = 1;
+  vvenccfg.m_sliceTypeAdapt = false;
+  vvenccfg.m_CTUSize = 64;
+  vvenccfg.m_poc0idr = 1;
+  vvenccfg.m_intraQPOffset = -1;
+  vvenccfg.m_picReordering = false;
+  vvenccfg.m_numThreads = 0; // auto
+  vvenccfg.m_SearchRange = 64;
+  vvenccfg.m_numRefPics = 0;
+  vvenccfg.m_RDOQ = 2;
+  vvenccfg.m_SignDataHidingEnabled = true;
+  vvenccfg.m_maxMTTDepthI = 0;
+  vvenccfg.m_maxNumMergeCand = 4;
+  vvenccfg.m_Affine = 0;
+  vvenccfg.m_alfSpeed = 2;
+  vvenccfg.m_allowDisFracMMVD = 0;
+  vvenccfg.m_BDOF = 0;
+  vvenccfg.m_DepQuantEnabled = false;
+  vvenccfg.m_AMVRspeed = 0;
+  vvenccfg.m_JointCbCrMode = 0;
+  vvenccfg.m_LFNST = 0;
+  vvenccfg.m_vvencMCTF.MCTFSpeed = 4;
+  vvenccfg.m_vvencMCTF.MCTFFutureReference = 0;
+  vvenccfg.m_MMVD = 0;
+  vvenccfg.m_MRL = 0;
+  vvenccfg.m_PROF = 0;
+  vvenccfg.m_saoScc = 0;
+  vvenccfg.m_bUseSAO = false;
+  vvenccfg.m_SbTMVP = 0;
+  vvenccfg.m_IBCFastMethod = 6;
+  vvenccfg.m_TSsize = 3;
+  vvenccfg.m_qtbttSpeedUp = 7;
+  vvenccfg.m_verbosity = g_verbosity;
+  vvenccfg.m_usePbIntraFast = 2;
+  vvenccfg.m_fastHad = 1;
+  vvenccfg.m_FastInferMerge = 4;
+  vvenccfg.m_bIntegerET = 1;
+  vvenccfg.m_IntraEstDecBit = 3;
+  vvenccfg.m_useSelectiveRDOQ = 2;
+  vvenccfg.m_FirstPassMode = 4;
+  vvenccfg.m_AccessUnitDelimiter = 1;
+  vvenccfg.m_lumaReshapeEnable = 0;
+  
+  // Configure for real-time low-latency encoding: output frames immediately
+  vvenccfg.m_maxParallelFrames = 0;  // Disable parallel frame processing to enable immediate output
+  vvenccfg.m_leadFrames = 0;         // No lead frames buffering
+  vvenccfg.m_trailFrames = 0;        // No trail frames buffering
+  
+  // Configure tiles to split frames into multiple slices for packet loss resilience
+  // Each tile becomes a separate slice, reducing the impact of packet loss
+  // Adjust these values based on your desired slice size:
+  // - More tiles = smaller slices = better packet loss resilience but slightly lower compression efficiency
+  // - For 1920x1080: 4x2 tiles = 8 slices per frame (each slice ~240x540 pixels)
+  // - For lower resolutions or smaller desired slice sizes, increase tile count
+  vvenccfg.m_picPartitionFlag = true;  // Enable picture partitioning (tiles)
+  vvenccfg.m_numTileCols = 2;          // Number of tile columns (horizontal splits)
+  vvenccfg.m_numTileRows = 2;          // Number of tile rows (vertical splits)
+  // Note: Do NOT set m_numExpTileCols/numExpTileRows - let encoder calculate automatically
+  // The encoder will automatically create uniform tiles when only numTileCols/numTileRows are set
+  vvenccfg.m_numSlicesInPic = vvenccfg.m_numTileCols * vvenccfg.m_numTileRows;       // Number of slices in picture (must match numTileCols * numTileRows)
+  vvenccfg.m_numSlicesInPic = 1;
+  // This creates 4x2 = 8 tiles/slices per frame
+  // Tile widths/heights will be calculated automatically by the encoder to divide the picture equally
+  vvenccfg.m_framesToBeEncoded = 20;
+
+  for (int i = 0; i < 1; i++) {
+    vvenccfg.m_GOPList[i].m_sliceType = 'B';
+    vvenccfg.m_GOPList[i].m_POC = i + 1;
+    vvenccfg.m_GOPList[i].m_QPOffset = 5;
+    vvenccfg.m_GOPList[i].m_QPOffsetModelOffset = -6.5;
+    vvenccfg.m_GOPList[i].m_QPOffsetModelScale = 0.2590;
+    vvenccfg.m_GOPList[i].m_CbQPoffset = 0;
+    vvenccfg.m_GOPList[i].m_CrQPoffset = 0;
+    vvenccfg.m_GOPList[i].m_QPFactor = 1.0;
+    vvenccfg.m_GOPList[i].m_tcOffsetDiv2 = 0;
+    vvenccfg.m_GOPList[i].m_betaOffsetDiv2 = 0;
+    int ref_num = 1;
+    vvenccfg.m_GOPList[i].m_numRefPicsActive[0] = ref_num;
+    vvenccfg.m_GOPList[i].m_numRefPicsActive[1] = 0;
+    vvenccfg.m_GOPList[i].m_numRefPics[0] = ref_num;
+    vvenccfg.m_GOPList[i].m_numRefPics[1] = 0;
+    vvenccfg.m_GOPList[i].m_deltaRefPics[0][0] = 1;
+    vvenccfg.m_GOPList[i].m_deltaRefPics[0][1] = 9;
+    vvenccfg.m_GOPList[i].m_deltaRefPics[0][2] = 17;
+    vvenccfg.m_GOPList[i].m_deltaRefPics[0][3] = 25;
+    vvenccfg.m_GOPList[i].m_deltaRefPics[1][0] = 1;
+    vvenccfg.m_GOPList[i].m_deltaRefPics[1][1] = 9;
+    vvenccfg.m_GOPList[i].m_deltaRefPics[1][2] = 17;
+    vvenccfg.m_GOPList[i].m_deltaRefPics[1][3] = 25;
+    vvenccfg.m_GOPList[i].m_temporalId = 0;
+  }
+  // vvenccfg.m_GOPList[7].m_QPOffsetModelOffset = 0.0;
+  // vvenccfg.m_GOPList[7].m_QPOffsetModelScale = 0.0;
 
   if( vvenc_init_config_parameter( &vvenccfg ) )
   {
     ret = false;
   }
 
-  cParserStr.clear();
-  if( rcVVEncAppCfg.checkCfg( &vvenccfg, cParserStr ))
-  {
-    msgApp( nullptr, VVENC_ERROR, "%s", cParserStr.str().c_str() );      
-    ret = false;
-  }
+  // cParserStr.clear();
+  // if( rcVVEncAppCfg.checkCfg( &vvenccfg, cParserStr ))
+  // {
+  //   msgApp( nullptr, VVENC_ERROR, "%s", cParserStr.str().c_str() );      
+  //   ret = false;
+  // }
 
   return ret;
 }
@@ -211,7 +381,7 @@ int main( int argc, char* argv[] )
   apputils::VVEncAppCfg vvencappCfg = apputils::VVEncAppCfg(true); // init config in easy mode
   vvencappCfg.setPresetChangeCallback(changePreset);
   vvenc_config vvenccfg;
-  vvenc_init_default( &vvenccfg, 1920, 1080, 60, VVENC_RC_OFF, VVENC_AUTO_QP, vvencPresetMode::VVENC_MEDIUM );
+  vvenc_init_default( &vvenccfg, 1920, 1080, 60, VVENC_RC_OFF, VVENC_AUTO_QP, vvencPresetMode::VVENC_FAST );
 
   vvenc_set_msg_callback( &vvenccfg, nullptr, &::msgFnc );  // register local (thread safe) logger (global logger is overwritten )
 
@@ -220,6 +390,10 @@ int main( int argc, char* argv[] )
   {
     return 1;
   }
+
+  vvencappCfg.m_inputFileName = "Lecture_5s.yuv";
+  vvencappCfg.m_bitstreamFileName = "output_loss_add_missing_0.266";
+
 
   // show version or help
   if( vvencappCfg.m_showVersion || vvencappCfg.m_showHelp )
@@ -234,6 +408,10 @@ int main( int argc, char* argv[] )
     return -1;
   }
 
+  // printf("mhhhhh I'm here!!!!!!\n");
+
+  // vvenccfg.m_GOPSize = 1; // set GOP size to 1 for all intra encoding
+
   int iRet = vvenc_encoder_open( enc, &vvenccfg );
   if( 0 != iRet )
   {
@@ -244,6 +422,7 @@ int main( int argc, char* argv[] )
 
   // get the adapted config
   vvenc_get_config( enc, &vvenccfg );
+  // vvenccfg.m_GOPSize = 1; // set GOP size to 1 for all intra encoding
 
   if( vvenccfg.m_verbosity >= VVENC_INFO )
   {
@@ -275,10 +454,13 @@ int main( int argc, char* argv[] )
   const int auSizeScale = vvenccfg.m_internChromaFormat <= VVENC_CHROMA_420 ? 2 : 3;
   vvenc_accessUnit_alloc_payload( &AU, auSizeScale * vvenccfg.m_SourceWidth * vvenccfg.m_SourceHeight + 1024 );
 
+  // printf("mhhh vvenccfg.m_internChromaFormat:%d\n", vvenccfg.m_internChromaFormat);
+
   // --- allocate memory for YUV input picture
   vvencYUVBuffer cYUVInputBuffer;
   vvenc_YUVBuffer_default( &cYUVInputBuffer );
   vvenc_YUVBuffer_alloc_buffer( &cYUVInputBuffer, vvenccfg.m_internChromaFormat, vvenccfg.m_SourceWidth, vvenccfg.m_SourceHeight );
+  // printf("mhhhh test, planes[0].width:%d, planes[1].width:%d, planes[2].width:%d\n", cYUVInputBuffer.planes[0].width, cYUVInputBuffer.planes[1].width, cYUVInputBuffer.planes[2].width);
 
   // --- start timer
   std::chrono::steady_clock::time_point cTPStartRun = std::chrono::steady_clock::now();
@@ -294,6 +476,9 @@ int main( int argc, char* argv[] )
   for( int pass = start; pass < end; pass++ )
   {
     // initialize the encoder pass
+    // For single-pass encoding (RCNumPasses == 1), the encoder is already initialized
+    // with pass 0 during vvenc_encoder_open(), but we still need to call init_pass
+    // to ensure the rate controller is properly configured with the stats file name
     iRet = vvenc_init_pass( enc, pass, vvencappCfg.m_RCStatsFileName.c_str() );
     if( 0 != iRet )
     {
@@ -365,6 +550,7 @@ int main( int argc, char* argv[] )
       vvencYUVBuffer* ptrYUVInputBuffer = nullptr;
       if( !bEof )
       {
+        // printf("mhhhh test1, planes[0].width:%d, planes[1].width:%d, planes[2].width:%d\n", cYUVInputBuffer.planes[0].width, cYUVInputBuffer.planes[1].width, cYUVInputBuffer.planes[2].width);
         if( 0 != cYuvFileInput.readYuvBuf( cYUVInputBuffer, bEof ) )
         {
           msgApp( nullptr, VVENC_ERROR, "vvencapp [error]: read file failed: %s\n",cYuvFileInput.getLastError().c_str() );
@@ -386,6 +572,7 @@ int main( int argc, char* argv[] )
       }
 
       // call encode
+      printf("mhhh Encoding frame %lld!!!!!!\n", iSeqNumber);
       iRet = vvenc_encode( enc, ptrYUVInputBuffer, &AU, &bEncodeDone );
       if( 0 != iRet )
       {
@@ -410,8 +597,49 @@ int main( int argc, char* argv[] )
 
         if( cOutBitstream.is_open() )
         {
-          // write output
-          cOutBitstream.write( (const char*)AU.payload, AU.payloadUsedSize );
+          static int64_t iWriteSequenceNumber = 0;
+          printf("mhhh Writing encoded frame %lld payloadUsedSize:%d\n", iWriteSequenceNumber, AU.payloadUsedSize );
+
+          // --- Split this access unit into individual NAL "packets" using Annex-B start codes
+          const uint8_t* data = (const uint8_t*)AU.payload;
+          int            size = AU.payloadUsedSize;
+
+          std::vector<NalView> nals = splitAnnexBToNals( data, size );
+
+          // Example packet-loss simulation: drop one whole NAL for this frame if desired
+          // (change dropNalIndex or condition as you like, or turn it off)
+          int  dropNalIndex = -1;              // -1 = no drop, >=0 = index to drop
+          bool simulateLoss = false;           // set true to enable
+          int drop_bytes = 1;
+          if( simulateLoss && iWriteSequenceNumber == 9 )
+          {
+            dropNalIndex = 2;                  // e.g. drop 3rd NAL of this frame
+          }
+
+          for( size_t n = 0; n < nals.size(); ++n )
+          {
+            const NalView& nv = nals[n];
+
+            if( (int)n == dropNalIndex )
+            {
+              int first_write_part = nv.size / 8;
+              cOutBitstream.write( (const char*)nv.ptr, first_write_part );
+              printf( "mhhh Dropped NAL %zu %d bytes at location %d writing bytes:%d\n", n, drop_bytes, first_write_part, nv.size - drop_bytes );
+              first_write_part += drop_bytes;
+              cOutBitstream.write( (const char*)nv.ptr + first_write_part, nv.size - first_write_part );
+              char missing_byte[drop_bytes];
+              for (int i = 0; i < drop_bytes; i++) {
+                missing_byte[i] = '0';
+              }
+              cOutBitstream.write(missing_byte, drop_bytes);
+              continue;
+            }
+
+            // write this NAL as one "packet"
+            cOutBitstream.write( (const char*)nv.ptr, nv.size );
+            printf( "mhhh Wrote NAL %zu, size:%d\n", n, nv.size );
+          }
+
           if( cOutBitstream.fail() )
           {
             msgApp( nullptr, VVENC_ERROR, "\nvvencapp [error]: write bitstream file failed (disk full?)\n");
@@ -420,12 +648,15 @@ int main( int argc, char* argv[] )
             vvenc_encoder_close( enc );
             return VVENC_ERR_UNSPECIFIED;
           }
+          iWriteSequenceNumber++;
         }
         uiFrames++;
       }
 
+      // printf("mhhh Reached max frames limit %lld iSeqNumber:%lld iRemSkipFrames:%d beof:%d bEncodeDone:%d\n", iMaxFrames, iSeqNumber, iRemSkipFrames, bEof?1:0, bEncodeDone?1:0);
       if( iMaxFrames > 0 && iSeqNumber >= ( iRemSkipFrames + iMaxFrames ) )
       {
+        // printf("mhhh Reached max frames limit %lld iSeqNumber:%lld iRemSkipFrames:%d\n", iMaxFrames, iSeqNumber, iRemSkipFrames);
         bEof = true;
       }
     }
